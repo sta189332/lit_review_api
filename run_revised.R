@@ -3,12 +3,12 @@ library(plumber)
 pr <- plumber::plumb("plumber.R")
 
 pr <- plumber::pr_set_api_spec(pr, function(spec) {
-
+  
   if (!is.null(spec$paths[["/api/v1/verify-metadata"]][["post"]])) {
-
+    
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$summary <- 
       "Verify academic metadata against DOI.org, Crossref, DataCite, and OpenAlex"
-
+    
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$description <- 
       paste(
         "Accepts a raw JSON array of academic metadata records.",
@@ -16,7 +16,7 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
         "compares submitted and registry titles, and returns strict verification evidence.",
         "Semantic Scholar and Europe PMC are reserved for future enrichment or domain-specific workflows and do not override DOI-title mismatches."
       )
-
+    
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$requestBody <- list(
       required = TRUE,
       description = "Paste a raw JSON array of academic metadata records.",
@@ -82,7 +82,7 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
         )
       )
     )
-
+    
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$responses <- list(
       "200" = list(
         description = "Successful verification response.",
@@ -128,7 +128,7 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
       )
     )
   }
-
+  
   spec
 })
 
