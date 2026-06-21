@@ -14,8 +14,7 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
       "and returns explicit DOI proxy versus registry semantics including doi_proxy_resolves, doi_registry_verified, doi_verification_basis, doi_resolution_status, doi_resolution_summary,",
       "as well as metadata verification fields including doi_exists_verified, title_verified, author_verified, journal_verified, year_verified, verification_level, registry_author, registry_journal, and registry_year.",
       "The legacy verified field remains backward-compatible and indicates DOI-title verification, not full metadata verification.",
-      "Top-level summary fields are returned as JSON scalars; data remains an array of record objects.",
-      "For development testing only, an optional per-record simulate_doi_proxy_failure flag can force the DOI.org proxy branch to fail while still requiring registry verification."
+      "Top-level summary fields are returned as JSON scalars; data remains an array of record objects."
     )
 
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$requestBody <- list(
@@ -35,12 +34,7 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
                 year = list(type = "integer", example = 2021),
                 journal = list(type = "string", example = "Computers and Education: Artificial Intelligence"),
                 methodology = list(type = "string", example = "Review-based"),
-                relevance_note = list(type = "string", example = "Explains AI literacy as a curriculum-relevant construct for higher education."),
-                simulate_doi_proxy_failure = list(
-                  type = "boolean",
-                  example = FALSE,
-                  description = "Development-only test switch. If TRUE, DOI.org proxy resolution is simulated as failed, while registry verification still runs normally."
-                )
+                relevance_note = list(type = "string", example = "Explains AI literacy as a curriculum-relevant construct for higher education.")
               )
             )
           ),
@@ -52,8 +46,7 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
               year = 2021,
               journal = "Computers and Education: Artificial Intelligence",
               methodology = "Review-based",
-              relevance_note = "Explains AI literacy as a curriculum-relevant construct for higher education.",
-              simulate_doi_proxy_failure = FALSE
+              relevance_note = "Explains AI literacy as a curriculum-relevant construct for higher education."
             ),
             list(
               doi = "10.1186/s41239-019-0171-0",
@@ -99,7 +92,6 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
                   doi_resolves = TRUE,
                   doi_proxy_resolves = TRUE,
                   doi_proxy_status_code = 302,
-                  doi_proxy_resolution_simulated = FALSE,
                   doi_registry_verified = TRUE,
                   registry_metadata_found = TRUE,
                   doi_verification_basis = "doi_proxy",

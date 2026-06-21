@@ -46,15 +46,6 @@ safe_integer <- function(x) {
   x
 }
 
-
-safe_logical <- function(x, default = FALSE) {
-  if (is.null(x) || length(x) == 0) return(default)
-  if (is.logical(x)) return(isTRUE(x[1]))
-  value <- tolower(stringr::str_trim(as.character(x[1])))
-  if (is.na(value) || value == "") return(default)
-  value %in% c("true", "t", "1", "yes", "y")
-}
-
 # Build top-level API responses with scalar JSON values.
 # Plumber's default JSON serializer can emit length-one R vectors as arrays.
 # jsonlite::unbox() keeps summary fields such as status, counts, and flags as
@@ -821,10 +812,6 @@ function(req, res) {
     if (!"journal" %in% names(incoming_data)) incoming_data$journal <- ""
     if (!"methodology" %in% names(incoming_data)) incoming_data$methodology <- ""
     if (!"relevance_note" %in% names(incoming_data)) incoming_data$relevance_note <- ""
-    # Optional development-only test switch. When TRUE for a record, the DOI.org
-    # proxy check is deliberately simulated as failed so the registry-verified
-    # fallback branch can be tested deterministically. Registry checks still run.
-    if (!"simulate_doi_proxy_failure" %in% names(incoming_data)) incoming_data$simulate_doi_proxy_failure <- FALSE
 
     incoming_data$doi <- normalise_doi(unlist(incoming_data$doi))
     incoming_data$title <- as.character(unlist(incoming_data$title))
@@ -833,12 +820,6 @@ function(req, res) {
     incoming_data$journal <- as.character(unlist(incoming_data$journal))
     incoming_data$methodology <- as.character(unlist(incoming_data$methodology))
     incoming_data$relevance_note <- as.character(unlist(incoming_data$relevance_note))
-    incoming_data$simulate_doi_proxy_failure <- vapply(
-      incoming_data$simulate_doi_proxy_failure,
-      safe_logical,
-      logical(1),
-      default = FALSE
-    )
 
     # Existing evidence fields, preserved for backward compatibility.
     # `verified = TRUE` continues to mean DOI-title verified, not fully metadata-verified.
@@ -847,7 +828,6 @@ function(req, res) {
     incoming_data$doi_resolves <- FALSE
     incoming_data$doi_proxy_resolves <- FALSE
     incoming_data$doi_proxy_status_code <- NA_integer_
-    incoming_data$doi_proxy_resolution_simulated <- FALSE
     incoming_data$doi_registry_verified <- FALSE
     incoming_data$registry_metadata_found <- FALSE
     incoming_data$doi_verification_basis <- "none"
@@ -895,15 +875,7 @@ function(req, res) {
         next
       }
 
-      if (isTRUE(incoming_data$simulate_doi_proxy_failure[j])) {
-        # Controlled test path: simulate only the DOI.org proxy failure.
-        # This must not fabricate metadata or bypass registry verification.
-        doi_check <- list(resolves = FALSE, status_code = NA_integer_)
-        incoming_data$doi_proxy_resolution_simulated[j] <- TRUE
-      } else {
-        doi_check <- doi_resolves_via_proxy(doi = incoming_data$doi[j], headers = POLITE_HEADERS)
-      }
-
+      doi_check <- doi_resolves_via_proxy(doi = incoming_data$doi[j], headers = POLITE_HEADERS)
       proxy_ok <- isTRUE(doi_check$resolves)
       incoming_data$doi_proxy_resolves[j] <- proxy_ok
       incoming_data$doi_resolves[j] <- proxy_ok  # Legacy alias: DOI.org proxy resolution only.
@@ -913,8 +885,6 @@ function(req, res) {
       incoming_data$doi_resolution_status[j] <- if (proxy_ok) "proxy_resolved" else "unknown"
       incoming_data$doi_resolution_summary[j] <- if (proxy_ok) {
         "DOI.org proxy resolved; registry metadata check pending."
-      } else if (isTRUE(incoming_data$doi_proxy_resolution_simulated[j])) {
-        "DOI.org proxy failure was simulated for testing; registry metadata check pending."
       } else {
         "DOI.org proxy did not resolve; registry metadata check pending."
       }
@@ -958,26 +928,14 @@ function(req, res) {
           )
         } else {
           incoming_data$doi_verification_basis[i] <- registry_basis
-          incoming_data$doi_resolution_status[i] <- if (isTRUE(incoming_data$doi_proxy_resolution_simulated[i])) {
-            "registry_verified_proxy_failed"
-          } else if (is.na(incoming_data$doi_proxy_status_code[i])) {
+          incoming_data$doi_resolution_status[i] <- if (is.na(incoming_data$doi_proxy_status_code[i])) {
             "registry_verified_proxy_not_checked"
           } else {
             "registry_verified_proxy_failed"
           }
-          incoming_data$doi_resolution_summary[i] <- if (isTRUE(incoming_data$doi_proxy_resolution_simulated[i])) {
-            paste0(
-              "DOI.org proxy failure was simulated for testing, but ",
-              metadata$source,
-              " registry metadata verified the DOI."
-            )
-          } else {
-            paste0(
-              "DOI.org proxy did not resolve, but ",
-              metadata$source,
-              " registry metadata verified the DOI."
-            )
-          }
+          incoming_data$doi_resolution_summary[i] <- paste0(
+            "DOI.org proxy did not resolve, but ", metadata$source, " registry metadata verified the DOI."
+          )
         }
       } else {
         incoming_data$registry_metadata_found[i] <- FALSE

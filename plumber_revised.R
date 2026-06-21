@@ -823,8 +823,16 @@ function(req, res) {
     
     # Existing evidence fields, preserved for backward compatibility.
     # `verified = TRUE` continues to mean DOI-title verified, not fully metadata-verified.
+    # `doi_resolves` is retained as a legacy alias for DOI.org proxy resolution only.
+    # Use `doi_exists_verified` for the broader registry-aware DOI existence signal.
     incoming_data$doi_resolves <- FALSE
+    incoming_data$doi_proxy_resolves <- FALSE
     incoming_data$doi_proxy_status_code <- NA_integer_
+    incoming_data$doi_registry_verified <- FALSE
+    incoming_data$registry_metadata_found <- FALSE
+    incoming_data$doi_verification_basis <- "none"
+    incoming_data$doi_resolution_status <- "unknown"
+    incoming_data$doi_resolution_summary <- "DOI proxy resolution and registry verification have not yet been checked."
     incoming_data$metadata_found <- FALSE
     incoming_data$verified <- FALSE
     incoming_data$verification_source <- "None"
@@ -859,15 +867,27 @@ function(req, res) {
         incoming_data$verification_status[j] <- "missing_or_empty_doi"
         incoming_data$evidence_level[j] <- "manual_review_only"
         incoming_data$error_log[j] <- "No DOI was supplied. This DOI-first endpoint cannot verify the record."
+        incoming_data$doi_verification_basis[j] <- "none"
+        incoming_data$doi_resolution_status[j] <- "unresolved_no_registry_metadata"
+        incoming_data$doi_resolution_summary[j] <- "No DOI was supplied, so neither DOI.org proxy resolution nor registry verification could be performed."
         incoming_data$year_match_status[j] <- "not_checked_due_to_missing_doi"
         incoming_data$metadata_verification_summary[j] <- "rejected_or_unverified: missing DOI."
         next
       }
       
       doi_check <- doi_resolves_via_proxy(doi = incoming_data$doi[j], headers = POLITE_HEADERS)
-      incoming_data$doi_resolves[j] <- isTRUE(doi_check$resolves)
+      proxy_ok <- isTRUE(doi_check$resolves)
+      incoming_data$doi_proxy_resolves[j] <- proxy_ok
+      incoming_data$doi_resolves[j] <- proxy_ok  # Legacy alias: DOI.org proxy resolution only.
       incoming_data$doi_proxy_status_code[j] <- suppressWarnings(as.integer(doi_check$status_code))
-      incoming_data$doi_exists_verified[j] <- isTRUE(doi_check$resolves)
+      incoming_data$doi_exists_verified[j] <- proxy_ok
+      incoming_data$doi_verification_basis[j] <- if (proxy_ok) "doi_proxy" else "none"
+      incoming_data$doi_resolution_status[j] <- if (proxy_ok) "proxy_resolved" else "unknown"
+      incoming_data$doi_resolution_summary[j] <- if (proxy_ok) {
+        "DOI.org proxy resolved; registry metadata check pending."
+      } else {
+        "DOI.org proxy did not resolve; registry metadata check pending."
+      }
       Sys.sleep(0.20)
     }
     
@@ -880,6 +900,8 @@ function(req, res) {
       
       if (isTRUE(metadata$found)) {
         incoming_data$metadata_found[i] <- TRUE
+        incoming_data$registry_metadata_found[i] <- TRUE
+        incoming_data$doi_registry_verified[i] <- TRUE
         incoming_data$verification_source[i] <- metadata$source
         incoming_data$verification_source_detail[i] <- metadata$source_detail
         incoming_data$registry_title[i] <- metadata$title
@@ -887,9 +909,37 @@ function(req, res) {
         incoming_data$registry_journal[i] <- metadata$journal
         incoming_data$registry_year[i] <- safe_integer(metadata$year)
         
-        # A DOI can also be treated as existing if it appears in a credible registry, even when DOI.org has a transient failure.
+        # A DOI can also be treated as existing if it appears in a credible registry, even when DOI.org proxy resolution fails.
         incoming_data$doi_exists_verified[i] <- isTRUE(incoming_data$doi_exists_verified[i]) || isTRUE(metadata$found)
+        
+        registry_basis <- switch(
+          metadata$source,
+          "Crossref" = "crossref_registry",
+          "DataCite" = "datacite_registry",
+          "OpenAlex" = "openalex_registry",
+          "publisher_or_registry_metadata"
+        )
+        
+        if (isTRUE(incoming_data$doi_proxy_resolves[i])) {
+          incoming_data$doi_verification_basis[i] <- "doi_proxy"
+          incoming_data$doi_resolution_status[i] <- "proxy_resolved"
+          incoming_data$doi_resolution_summary[i] <- paste0(
+            "DOI.org proxy resolved and ", metadata$source, " registry metadata was found."
+          )
+        } else {
+          incoming_data$doi_verification_basis[i] <- registry_basis
+          incoming_data$doi_resolution_status[i] <- if (is.na(incoming_data$doi_proxy_status_code[i])) {
+            "registry_verified_proxy_not_checked"
+          } else {
+            "registry_verified_proxy_failed"
+          }
+          incoming_data$doi_resolution_summary[i] <- paste0(
+            "DOI.org proxy did not resolve, but ", metadata$source, " registry metadata verified the DOI."
+          )
+        }
       } else {
+        incoming_data$registry_metadata_found[i] <- FALSE
+        incoming_data$doi_registry_verified[i] <- FALSE
         incoming_data$verification_source[i] <- "None"
         incoming_data$verification_source_detail[i] <- "None"
         incoming_data$verification_level[i] <- if (isTRUE(incoming_data$doi_exists_verified[i])) "doi_exists_only" else "rejected_or_unverified"
@@ -897,6 +947,9 @@ function(req, res) {
         incoming_data$year_match_status[i] <- "metadata_missing"
         
         if (isTRUE(incoming_data$doi_resolves[i])) {
+          incoming_data$doi_verification_basis[i] <- "doi_proxy"
+          incoming_data$doi_resolution_status[i] <- "proxy_resolved"
+          incoming_data$doi_resolution_summary[i] <- "DOI.org proxy resolved, but no usable Crossref/DataCite/OpenAlex registry metadata was found."
           incoming_data$verification_status[i] <- "doi_resolves_metadata_missing"
           incoming_data$evidence_level[i] <- "doi_resolves_metadata_missing"
           incoming_data$error_log[i] <- paste(
@@ -904,6 +957,9 @@ function(req, res) {
             metadata$error_log
           )
         } else if (looks_like_title_repair_candidate(incoming_data$title[i], incoming_data$author[i], incoming_data$year[i])) {
+          incoming_data$doi_verification_basis[i] <- "none"
+          incoming_data$doi_resolution_status[i] <- "unresolved_no_registry_metadata"
+          incoming_data$doi_resolution_summary[i] <- "DOI.org proxy did not resolve and no registry metadata was found."
           incoming_data$verification_status[i] <- "doi_unresolved_title_repair_candidate"
           incoming_data$evidence_level[i] <- "title_repair_candidate"
           incoming_data$error_log[i] <- paste(
@@ -911,6 +967,9 @@ function(req, res) {
             metadata$error_log
           )
         } else {
+          incoming_data$doi_verification_basis[i] <- "none"
+          incoming_data$doi_resolution_status[i] <- "unresolved_no_registry_metadata"
+          incoming_data$doi_resolution_summary[i] <- "DOI.org proxy did not resolve and no registry metadata was found."
           incoming_data$verification_status[i] <- "doi_unresolved_and_no_registry_metadata"
           incoming_data$evidence_level[i] <- "rejected"
           incoming_data$error_log[i] <- paste(
