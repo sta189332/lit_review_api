@@ -13,7 +13,8 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
       "compares submitted and registry titles, authors, journals or venues, and years,",
       "and returns explicit verification fields including doi_exists_verified, title_verified, author_verified,",
       "journal_verified, year_verified, verification_level, registry_author, registry_journal, and registry_year.",
-      "The legacy verified field remains backward-compatible and indicates DOI-title verification, not full metadata verification."
+      "The legacy verified field remains backward-compatible and indicates DOI-title verification, not full metadata verification.",
+      "Top-level summary fields are returned as JSON scalars; data remains an array of record objects."
     )
 
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$requestBody <- list(

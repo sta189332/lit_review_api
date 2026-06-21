@@ -46,6 +46,40 @@ safe_integer <- function(x) {
   x
 }
 
+# Build top-level API responses with scalar JSON values.
+# Plumber's default JSON serializer can emit length-one R vectors as arrays.
+# jsonlite::unbox() keeps summary fields such as status, counts, and flags as
+# JSON scalars while preserving data as an array of record objects.
+api_response <- function(...) {
+  response <- list(...)
+
+  scalar_fields <- c(
+    "status",
+    "message",
+    "hint",
+    "total_processed",
+    "verified_count",
+    "doi_title_verified_count",
+    "fully_metadata_verified_count",
+    "metadata_partially_verified_count",
+    "doi_exists_only_count",
+    "rejected_or_unverified_count",
+    "manual_confirmation_required_count",
+    "step_b_eligible_count",
+    "all_passed",
+    "all_fully_metadata_verified"
+  )
+
+  for (field in intersect(names(response), scalar_fields)) {
+    value <- response[[field]]
+    if (is.atomic(value) && length(value) == 1 && !inherits(value, "AsIs")) {
+      response[[field]] <- jsonlite::unbox(value)
+    }
+  }
+
+  response
+}
+
 strip_registry_markup <- function(x) {
   if (is.null(x) || length(x) == 0 || is.na(x[1])) return("")
   x <- as.character(x[1])
@@ -756,7 +790,7 @@ function(req, res) {
 
     if (is.null(incoming_data) || !is.data.frame(incoming_data)) {
       res$status <- 400
-      return(list(
+      return(api_response(
         status = "error",
         message = "No usable JSON body was received. In Swagger, paste the JSON into the Request body box, not into a query parameter."
       ))
@@ -764,7 +798,7 @@ function(req, res) {
 
     if (nrow(incoming_data) == 0) {
       res$status <- 400
-      return(list(status = "error", message = "JSON array is valid but contains no records."))
+      return(api_response(status = "error", message = "JSON array is valid but contains no records."))
     }
 
     required_keys <- c("doi", "author", "title", "year")
@@ -772,7 +806,7 @@ function(req, res) {
 
     if (length(missing_keys) > 0) {
       res$status <- 400
-      return(list(status = "error", message = paste("Missing mandatory array columns:", paste(missing_keys, collapse = ", "))))
+      return(api_response(status = "error", message = paste("Missing mandatory array columns:", paste(missing_keys, collapse = ", "))))
     }
 
     if (!"journal" %in% names(incoming_data)) incoming_data$journal <- ""
@@ -960,7 +994,7 @@ function(req, res) {
       "doi_title_verified", "metadata_partially_verified", "fully_metadata_verified"
     ), na.rm = TRUE)
 
-    return(list(
+    return(api_response(
       status = "success",
       total_processed = nrow(incoming_data),
       verified_count = sum(incoming_data$verified, na.rm = TRUE),
@@ -977,7 +1011,7 @@ function(req, res) {
     ))
   }, error = function(err) {
     res$status <- 500
-    return(list(
+    return(api_response(
       status = "runtime_crash",
       message = err$message,
       hint = "Check request parsing, DOI URL construction, DOI.org resolution, Crossref/DataCite/OpenAlex response parsing, metadata extraction, or package versions."

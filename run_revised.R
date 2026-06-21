@@ -3,19 +3,19 @@ library(plumber)
 pr <- plumber::plumb("plumber.R")
 
 pr <- plumber::pr_set_api_spec(pr, function(spec) {
-  
   if (!is.null(spec$paths[["/api/v1/verify-metadata"]][["post"]])) {
-    
-    spec$paths[["/api/v1/verify-metadata"]][["post"]]$summary <- 
+    spec$paths[["/api/v1/verify-metadata"]][["post"]]$summary <-
       "Verify academic metadata against DOI.org, Crossref, DataCite, and OpenAlex"
     
-    spec$paths[["/api/v1/verify-metadata"]][["post"]]$description <- 
-      paste(
-        "Accepts a raw JSON array of academic metadata records.",
-        "The API checks DOI.org resolution, retrieves DOI metadata from Crossref, DataCite, and OpenAlex,",
-        "compares submitted and registry titles, and returns strict verification evidence.",
-        "Semantic Scholar and Europe PMC are reserved for future enrichment or domain-specific workflows and do not override DOI-title mismatches."
-      )
+    spec$paths[["/api/v1/verify-metadata"]][["post"]]$description <- paste(
+      "Accepts a raw JSON array of academic metadata records.",
+      "The API checks DOI.org resolution, retrieves DOI metadata from Crossref, DataCite, and OpenAlex,",
+      "compares submitted and registry titles, authors, journals or venues, and years,",
+      "and returns explicit verification fields including doi_exists_verified, title_verified, author_verified,",
+      "journal_verified, year_verified, verification_level, registry_author, registry_journal, and registry_year.",
+      "The legacy verified field remains backward-compatible and indicates DOI-title verification, not full metadata verification.",
+      "Top-level summary fields are returned as JSON scalars; data remains an array of record objects."
+    )
     
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$requestBody <- list(
       required = TRUE,
@@ -28,55 +28,34 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
               type = "object",
               required = list("doi", "author", "title", "year"),
               properties = list(
-                doi = list(
-                  type = "string",
-                  example = "10.3389/feduc.2025.1667884"
-                ),
-                author = list(
-                  type = "string",
-                  example = "Gawe"
-                ),
-                title = list(
-                  type = "string",
-                  example = "A systematic review on AI-enhanced pedagogies in higher education in the Global South"
-                ),
-                year = list(
-                  type = "integer",
-                  example = 2025
-                ),
-                journal = list(
-                  type = "string",
-                  example = "Frontiers in Education"
-                ),
-                methodology = list(
-                  type = "string",
-                  example = "Review-based"
-                ),
-                relevance_note = list(
-                  type = "string",
-                  example = "Examines AI-enhanced pedagogies in higher education contexts relevant to Global South curriculum and equity debates."
-                )
+                doi = list(type = "string", example = "10.1016/j.caeai.2021.100041"),
+                author = list(type = "string", example = "Ng"),
+                title = list(type = "string", example = "Conceptualizing AI literacy: An exploratory review"),
+                year = list(type = "integer", example = 2021),
+                journal = list(type = "string", example = "Computers and Education: Artificial Intelligence"),
+                methodology = list(type = "string", example = "Review-based"),
+                relevance_note = list(type = "string", example = "Explains AI literacy as a curriculum-relevant construct for higher education.")
               )
             )
           ),
           example = list(
             list(
-              doi = "10.3389/feduc.2025.1667884",
-              author = "Gawe",
-              title = "A systematic review on AI-enhanced pedagogies in higher education in the Global South",
-              year = 2025,
-              journal = "Frontiers in Education",
+              doi = "10.1016/j.caeai.2021.100041",
+              author = "Ng",
+              title = "Conceptualizing AI literacy: An exploratory review",
+              year = 2021,
+              journal = "Computers and Education: Artificial Intelligence",
               methodology = "Review-based",
-              relevance_note = "Examines AI-enhanced pedagogies in higher education contexts relevant to Global South curriculum and equity debates."
+              relevance_note = "Explains AI literacy as a curriculum-relevant construct for higher education."
             ),
             list(
-              doi = "10.14742/ajet.10596",
-              author = "Medina-Gual",
-              title = "A tridimensional model of AI literacy: An empirical analysis of student performance and demographic patterns in higher education",
-              year = 2025,
-              journal = "Australasian Journal of Educational Technology",
-              methodology = "Empirical",
-              relevance_note = "Provides evidence on AI literacy dimensions that can support higher education curriculum design."
+              doi = "10.1186/s41239-019-0171-0",
+              author = "Zawacki-Richter",
+              title = "Systematic review of research on artificial intelligence applications in higher education – where are the educators?",
+              year = 2019,
+              journal = "International Journal of Educational Technology in Higher Education",
+              methodology = "Review-based",
+              relevance_note = "Provides foundational evidence on AI in higher education and educator involvement."
             )
           )
         )
@@ -85,23 +64,31 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
     
     spec$paths[["/api/v1/verify-metadata"]][["post"]]$responses <- list(
       "200" = list(
-        description = "Successful verification response.",
+        description = "Successful verification response with DOI-title and full metadata verification levels.",
         content = list(
           "application/json" = list(
             example = list(
               status = "success",
-              total_processed = 2,
-              verified_count = 2,
+              total_processed = 1,
+              verified_count = 1,
+              doi_title_verified_count = 1,
+              fully_metadata_verified_count = 1,
+              metadata_partially_verified_count = 0,
+              doi_exists_only_count = 0,
+              rejected_or_unverified_count = 0,
+              manual_confirmation_required_count = 0,
+              step_b_eligible_count = 1,
               all_passed = TRUE,
+              all_fully_metadata_verified = TRUE,
               data = list(
                 list(
-                  doi = "10.3389/feduc.2025.1667884",
-                  author = "Gawe",
-                  title = "A systematic review on AI-enhanced pedagogies in higher education in the Global South",
-                  year = 2025,
-                  journal = "Frontiers in Education",
+                  doi = "10.1016/j.caeai.2021.100041",
+                  author = "Ng",
+                  title = "Conceptualizing AI literacy: An exploratory review",
+                  year = 2021,
+                  journal = "Computers and Education: Artificial Intelligence",
                   methodology = "Review-based",
-                  relevance_note = "Examines AI-enhanced pedagogies in higher education contexts relevant to Global South curriculum and equity debates.",
+                  relevance_note = "Explains AI literacy as a curriculum-relevant construct for higher education.",
                   doi_resolves = TRUE,
                   doi_proxy_status_code = 302,
                   metadata_found = TRUE,
@@ -110,10 +97,25 @@ pr <- plumber::pr_set_api_spec(pr, function(spec) {
                   verification_source_detail = "Crossref DOI metadata",
                   verification_status = "verified_exact_title_match",
                   evidence_level = "primary_doi_title_match",
-                  registry_title = "A systematic review on AI-enhanced pedagogies in higher education in the Global South",
+                  registry_title = "Conceptualizing AI literacy: An exploratory review",
                   registry_status_code = 200,
                   error_log = "Passed verification: exact or near-exact DOI-title match.",
-                  title_match_score = 1
+                  title_match_score = 1,
+                  doi_exists_verified = TRUE,
+                  title_verified = TRUE,
+                  author_verified = TRUE,
+                  journal_verified = TRUE,
+                  year_verified = TRUE,
+                  verification_level = "fully_metadata_verified",
+                  registry_author = "Ng",
+                  registry_journal = "Computers and Education: Artificial Intelligence",
+                  registry_year = 2021,
+                  author_match_score = 1,
+                  journal_match_score = 1,
+                  year_match_status = "exact_year_match",
+                  metadata_verification_summary = "verification_level=fully_metadata_verified; title_status=verified_exact_title_match; author_verified=TRUE; journal_verified=TRUE; year_verified=TRUE; year_match_status=exact_year_match",
+                  manual_confirmation_required = FALSE,
+                  step_b_eligible = TRUE
                 )
               )
             )
